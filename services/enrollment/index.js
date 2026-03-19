@@ -1,107 +1,120 @@
 // services/enrollment/index.js
-const express = require('express')
-const crypto  = require('crypto')
-const { Pool } = require('pg')
-const { generateNIN } = require('./nin-generator')
+const express  = require('express');
+const crypto   = require('crypto');
+const cors     = require('cors');
+const pool     = require('./db');
+const { generateNIN } = require('./nin-generator');
 
-const app = express()
-
-// CORS
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*')
-  res.header('Access-Control-Allow-Headers', 'Content-Type')
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  if (req.method === 'OPTIONS') return res.sendStatus(200)
-  next()
-})
-
-app.use(express.json())
-
-// PostgreSQL connection
-const pool = new Pool({
-  user:     'admin',
-  host:     'localhost',
-  database: 'zam_id_wallet',
-  password: 'zamwallent123',
-  port:     5432,
-})
+const app = express();
+app.use(cors());
+app.use(express.json());
 
 // Health check
 app.get('/', (req, res) => {
-  res.json({ service: 'ZAM-ID Enrolment', status: 'running', port: 3001 })
-})
+  res.json({ service: 'ZAM-ID Enrolment', status: 'running', port: 3001 });
+});
 
-// GET /citizens — fetch all enrolled citizens
-app.get('/citizens', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT c.id, c.first_name, c.last_name, c.date_of_birth, c.gender,
-             n.nin, n.status, n.issued_at
-      FROM citizens c
-      JOIN nin_records n ON n.citizen_id = c.id
-      ORDER BY n.issued_at DESC
-    `)
-    res.json({ success: true, citizens: result.rows })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// POST /enrol — main endpoint
+// POST /enrol — enrol a citizen and save to database
 app.post('/enrol', async (req, res) => {
-  const { firstName, lastName, dateOfBirth, gender, phone, province } = req.body
+  const { firstName, lastName, dateOfBirth, gender } = req.body;
 
-  // Step 1 — Validate input
   if (!firstName || !lastName || !dateOfBirth || !gender) {
     return res.status(400).json({
-      error: 'Missing required fields: firstName, lastName, dateOfBirth, gender'
-    })
+      error: 'Missing fields: firstName, lastName, dateOfBirth, gender'
+    });
   }
 
-  try {
-    // Step 2 — Generate the 13-digit NIN
-    const nin = generateNIN(dateOfBirth, gender, 1)
+  const client = await pool.connect();
 
-    // Step 3 — Generate biometric hash placeholder
+  try {
+    await client.query('BEGIN');
+
+    const citizenResult = await client.query(
+      `INSERT INTO citizens (first_name, last_name, date_of_birth, gender, nationality)
+       VALUES ($1, $2, $3, $4, 'Zambian')
+       RETURNING id`,
+      [firstName, lastName, dateOfBirth, gender]
+    );
+    const citizenId = citizenResult.rows[0].id;
+
+    const nin = generateNIN(dateOfBirth, gender, 1);
+
+    await client.query(
+      `INSERT INTO nin_records (citizen_id, nin, status, issued_by)
+       VALUES ($1, $2, 'active', 'ZAM-ID-SYSTEM')`,
+      [citizenId, nin]
+    );
+
     const bioHash = crypto
       .createHash('sha256')
       .update(`${nin}-${dateOfBirth}-${Date.now()}`)
-      .digest('hex')
+      .digest('hex');
 
-    // Step 4 — Save citizen to database
-    const citizenResult = await pool.query(
-      `INSERT INTO citizens 
-        (first_name, last_name, date_of_birth, gender, contact_phone, current_address)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id`,
-      [firstName, lastName, dateOfBirth, gender, phone || null,
-       province ? JSON.stringify({ province }) : null]
-    )
-    const citizenId = citizenResult.rows[0].id
+    await client.query(
+      `INSERT INTO biometrics (citizen_id, type, data, hash)
+       VALUES ($1, 'facial', $2, $3)`,
+      [citizenId, Buffer.from(bioHash), bioHash]
+    );
 
-    // Step 5 — Save NIN record
-    await pool.query(
-      `INSERT INTO nin_records (citizen_id, nin, issued_by)
-       VALUES ($1, $2, $3)`,
-      [citizenId, nin, 'ZAM-ID Issuer Dashboard']
-    )
+    await client.query('COMMIT');
 
-    // Step 6 — Return response
     res.status(201).json({
       success: true,
-      nin,
-      bioHash,
-      citizen: { firstName, lastName, dateOfBirth, gender },
-      message: 'Citizen enrolled. NIN generated and saved to database.'
-    })
+      nin:     nin,
+      bioHash: bioHash,
+      citizen: {
+        id: citizenId,
+        firstName,
+        lastName,
+        dateOfBirth,
+        gender
+      },
+      message: 'Citizen enrolled and saved to database successfully.'
+    });
 
   } catch (err) {
-    console.error('Enrolment error:', err.message)
-    res.status(500).json({ error: err.message })
-  }
-})
+    await client.query('ROLLBACK');
+    console.error('Enrolment failed:', err.message);
 
-const PORT = process.env.PORT || 3001
+    if (err.code === '23505') {
+      return res.status(409).json({
+        error: 'Duplicate entry — citizen or NIN already exists'
+      });
+    }
+
+    res.status(500).json({ error: 'Enrolment failed: ' + err.message });
+
+  } finally {
+    client.release();
+  }
+});
+
+// GET /citizen/:nin — look up a citizen by NIN
+app.get('/citizen/:nin', async (req, res) => {
+  const { nin } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT c.id, c.first_name, c.last_name, c.date_of_birth, c.gender,
+              n.nin, n.status, n.issued_at
+       FROM citizens c
+       JOIN nin_records n ON n.citizen_id = c.id
+       WHERE n.nin = $1`,
+      [nin]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Citizen not found' });
+    }
+
+    res.json({ success: true, citizen: result.rows[0] });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Enrolment service running on port ${PORT}`)
-})
+  console.log(`Enrolment service running on port ${PORT}`);
+});
