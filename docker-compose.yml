@@ -1,0 +1,33 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: zamid-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: zamwallent123
+      POSTGRES_DB: zam_id_wallet
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  broker:
+    image: rabbitmq:3-management-alpine
+    container_name: zamid-broker
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  vault:
+    image: hashicorp/vault:1.13
+    container_name: zamid-vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "root"
+    cap_add:
+      - IPC_LOCK
+
+volumes:
+  postgres_data:
