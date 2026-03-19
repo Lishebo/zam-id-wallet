@@ -77,8 +77,5 @@ if (require.main === module) {
   // All three should print 13 digits
 }
 
-const { generateNIN } = require('./nin-generator');
 
-// Inside the POST /enrol route:
-//const nin = generateNIN(req.body.dateOfBirth, req.body.gender, 1);
-console.log('Generated NIN:', nin);
+
