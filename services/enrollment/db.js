@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // services/enrollment/db.js
 // Connects to the PostgreSQL database
 
@@ -12,6 +13,18 @@ const pool = new Pool({
 });
 
 // Test the connection when the service starts
+=======
+﻿const { Pool } = require('pg');
+
+const pool = new Pool({
+  host:     '127.0.0.1',
+  port:     5432,
+  database: 'zam_id_wallet',
+  user:     'admin',
+  password: 'zamwallent123',
+});
+
+>>>>>>> 7025459cadbd346aa8238a9341e9532aab519fac
 pool.connect((err, client, release) => {
   if (err) {
     console.error('Database connection failed:', err.message);
@@ -21,4 +34,8 @@ pool.connect((err, client, release) => {
   }
 });
 
+<<<<<<< HEAD
 module.exports = pool;
+=======
+module.exports = pool;
+>>>>>>> 7025459cadbd346aa8238a9341e9532aab519fac
