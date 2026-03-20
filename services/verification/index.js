@@ -31,8 +31,8 @@ app.post('/verify', async (req, res) => {
     }
 
     res.json({
-      verified:  true,
-      nin:       citizen.nin,
+      verified: true,
+      nin:      citizen.nin,
       citizen: {
         id:          citizen.id,
         firstName:   citizen.first_name,

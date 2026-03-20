@@ -18,7 +18,7 @@ const pool = new Pool({
 
 const pool = new Pool({
   host:     '127.0.0.1',
-  port:     5433,
+  port:     5432,
   database: 'zam_id_wallet',
   user:     'admin',
   password: 'zamwallent123',
