@@ -1,21 +1,25 @@
+import { useState, useEffect } from 'react'
 import { MdPeople, MdBadge, MdChildCare, MdHub } from 'react-icons/md'
-
-const stats = [
-  { label: 'Total Enrolments',      value: '1,342',  sub: '+12 today',   icon: <MdPeople size={28} />,    color: 'bg-blue-500'   },
-  { label: 'NIns Issued',           value: '1,298',  sub: '97% success', icon: <MdBadge size={28} />,     color: 'bg-green-600'  },
-  { label: 'Birth Registrations',   value: '204',    sub: '+3 today',    icon: <MdChildCare size={28} />, color: 'bg-yellow-500' },
-  { label: 'GSB Transactions',      value: '87',     sub: 'Last 24hrs',  icon: <MdHub size={28} />,       color: 'bg-purple-500' },
-]
-
-const recent = [
-  { nin: '9903157001007', name: 'Chanda Mutale',   gender: 'Male',   status: 'Active'  },
-  { nin: '0111226001014', name: 'Mwape Bwalya',    gender: 'Female', status: 'Active'  },
-  { nin: '8507043003009', name: 'Joseph Phiri',    gender: 'Male',   status: 'Pending' },
-  { nin: '9205190002003', name: 'Grace Lungu',     gender: 'Female', status: 'Active'  },
-  { nin: '0008124001002', name: 'Kelvin Mwansa',   gender: 'Male',   status: 'Active'  },
-]
+import { enrolmentAPI } from '../api'
 
 export default function Dashboard() {
+  const [citizens, setCitizens] = useState([])
+  const [loading, setLoading]   = useState(true)
+
+  useEffect(() => {
+    enrolmentAPI.get('/citizens')
+      .then(res => setCitizens(res.data.citizens || []))
+      .catch(() => setCitizens([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const stats = [
+    { label: 'Total Enrolments',    value: citizens.length,                                          sub: 'From database',   icon: <MdPeople size={28} />,    color: 'bg-blue-500'   },
+    { label: 'NIns Issued',         value: citizens.filter(c => c.status === 'active').length,       sub: 'Active NIns',     icon: <MdBadge size={28} />,     color: 'bg-green-600'  },
+    { label: 'Birth Registrations', value: 0,                                                        sub: 'Civil reg',       icon: <MdChildCare size={28} />, color: 'bg-yellow-500' },
+    { label: 'GSB Transactions',    value: 0,                                                        sub: 'Last 24hrs',      icon: <MdHub size={28} />,       color: 'bg-purple-500' },
+  ]
+
   return (
     <div className="space-y-6">
 
@@ -27,7 +31,9 @@ export default function Dashboard() {
               {s.icon}
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-800">{s.value}</p>
+              <p className="text-2xl font-bold text-gray-800">
+                {loading ? '...' : s.value}
+              </p>
               <p className="text-sm text-gray-500">{s.label}</p>
               <p className="text-xs text-green-600 font-medium">{s.sub}</p>
             </div>
@@ -41,37 +47,42 @@ export default function Dashboard() {
           <h3 className="font-semibold text-gray-800">Recent Enrolments</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
-              <tr>
-                <th className="px-6 py-3 text-left">NIN</th>
-                <th className="px-6 py-3 text-left">Full Name</th>
-                <th className="px-6 py-3 text-left">Gender</th>
-                <th className="px-6 py-3 text-left">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {recent.map((r) => (
-                <tr key={r.nin} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-3 font-mono text-green-700 font-medium">{r.nin}</td>
-                  <td className="px-6 py-3 text-gray-800">{r.name}</td>
-                  <td className="px-6 py-3 text-gray-500">{r.gender}</td>
-                  <td className="px-6 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      r.status === 'Active'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {r.status}
-                    </span>
-                  </td>
+          {loading ? (
+            <div className="px-6 py-8 text-center text-gray-400">Loading...</div>
+          ) : citizens.length === 0 ? (
+            <div className="px-6 py-8 text-center text-gray-400">No enrolments yet</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+                <tr>
+                  <th className="px-6 py-3 text-left">NIN</th>
+                  <th className="px-6 py-3 text-left">Full Name</th>
+                  <th className="px-6 py-3 text-left">Gender</th>
+                  <th className="px-6 py-3 text-left">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {citizens.map((c) => (
+                  <tr key={c.nin} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-3 font-mono text-green-700 font-medium">{c.nin}</td>
+                    <td className="px-6 py-3 text-gray-800">{c.first_name} {c.last_name}</td>
+                    <td className="px-6 py-3 text-gray-500 capitalize">{c.gender}</td>
+                    <td className="px-6 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
+                        c.status === 'active'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {c.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
-
     </div>
   )
 }

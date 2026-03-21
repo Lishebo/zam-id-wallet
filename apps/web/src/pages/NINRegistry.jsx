@@ -1,16 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MdSearch, MdBadge, MdCheckCircle, MdCancel } from 'react-icons/md'
-
-const mockRegistry = [
-  { nin: '9903157001007', firstName: 'Chanda',  lastName: 'Mutale',   dob: '1999-03-15', gender: 'Male',   province: 'Lusaka',     status: 'active'    },
-  { nin: '0111226001014', firstName: 'Mwape',   lastName: 'Bwalya',   dob: '2001-11-22', gender: 'Female', province: 'Copperbelt', status: 'active'    },
-  { nin: '8507043003009', firstName: 'Joseph',  lastName: 'Phiri',    dob: '1985-07-04', gender: 'Male',   province: 'Eastern',    status: 'suspended' },
-  { nin: '9205190002003', firstName: 'Grace',   lastName: 'Lungu',    dob: '1992-05-19', gender: 'Female', province: 'Southern',   status: 'active'    },
-  { nin: '0008124001002', firstName: 'Kelvin',  lastName: 'Mwansa',   dob: '2000-08-12', gender: 'Male',   province: 'Northern',   status: 'active'    },
-  { nin: '9401085002006', firstName: 'Namukolo',lastName: 'Siame',    dob: '1994-01-08', gender: 'Female', province: 'Western',    status: 'active'    },
-  { nin: '8812317001003', firstName: 'Patrick', lastName: 'Zulu',     dob: '1988-12-31', gender: 'Male',   province: 'Luapula',    status: 'revoked'   },
-  { nin: '9706224002008', firstName: 'Monde',   lastName: 'Kabwe',    dob: '1997-06-22', gender: 'Female', province: 'Muchinga',   status: 'active'    },
-]
+import { enrolmentAPI, verificationAPI } from '../api'
 
 const statusStyle = {
   active:    'bg-green-100 text-green-700',
@@ -19,18 +9,41 @@ const statusStyle = {
 }
 
 export default function NINRegistry() {
+  const [citizens, setCitizens] = useState([])
+  const [loading, setLoading]   = useState(true)
   const [query, setQuery]       = useState('')
   const [selected, setSelected] = useState(null)
+  const [verifying, setVerifying] = useState(false)
+  const [verifyResult, setVerifyResult] = useState(null)
 
-  const filtered = mockRegistry.filter((c) => {
+  useEffect(() => {
+    enrolmentAPI.get('/citizens')
+      .then(res => setCitizens(res.data.citizens || []))
+      .catch(() => setCitizens([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = citizens.filter((c) => {
     const q = query.toLowerCase()
     return (
-      c.nin.includes(q) ||
-      c.firstName.toLowerCase().includes(q) ||
-      c.lastName.toLowerCase().includes(q) ||
-      c.province.toLowerCase().includes(q)
+      c.nin?.toLowerCase().includes(q) ||
+      c.first_name?.toLowerCase().includes(q) ||
+      c.last_name?.toLowerCase().includes(q)
     )
   })
+
+  const handleVerify = async (nin) => {
+    setVerifying(true)
+    setVerifyResult(null)
+    try {
+      const res = await verificationAPI.get(`/verify/${nin}`)
+      setVerifyResult({ success: true, ...res.data })
+    } catch (err) {
+      setVerifyResult({ success: false, error: err.response?.data?.error || 'Verification failed' })
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -50,65 +63,66 @@ export default function NINRegistry() {
 
         {/* Table */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm">
-
-          {/* Search */}
           <div className="p-4 border-b border-gray-100">
             <div className="relative">
               <MdSearch size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by NIN, name or province..."
+                placeholder="Search by NIN or name..."
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => { setQuery(e.target.value); setSelected(null) }}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
           </div>
 
-          {/* Results */}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
-                <tr>
-                  <th className="px-4 py-3 text-left">NIN</th>
-                  <th className="px-4 py-3 text-left">Full Name</th>
-                  <th className="px-4 py-3 text-left">Province</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filtered.length === 0 ? (
+            {loading ? (
+              <div className="px-6 py-8 text-center text-gray-400">Loading...</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
-                      No records found
-                    </td>
+                    <th className="px-4 py-3 text-left">NIN</th>
+                    <th className="px-4 py-3 text-left">Full Name</th>
+                    <th className="px-4 py-3 text-left">Gender</th>
+                    <th className="px-4 py-3 text-left">Status</th>
                   </tr>
-                ) : (
-                  filtered.map((c) => (
-                    <tr
-                      key={c.nin}
-                      onClick={() => setSelected(c)}
-                      className={`hover:bg-green-50 cursor-pointer transition-colors ${
-                        selected?.nin === c.nin ? 'bg-green-50' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-3 font-mono text-green-700 font-medium">{c.nin}</td>
-                      <td className="px-4 py-3 text-gray-800">{c.firstName} {c.lastName}</td>
-                      <td className="px-4 py-3 text-gray-500">{c.province}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${statusStyle[c.status]}`}>
-                          {c.status}
-                        </span>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
+                        No records found
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    filtered.map((c) => (
+                      <tr
+                        key={c.nin}
+                        onClick={() => { setSelected(c); setVerifyResult(null) }}
+                        className={`hover:bg-green-50 cursor-pointer transition-colors ${
+                          selected?.nin === c.nin ? 'bg-green-50' : ''
+                        }`}
+                      >
+                        <td className="px-4 py-3 font-mono text-green-700 font-medium">{c.nin}</td>
+                        <td className="px-4 py-3 text-gray-800 capitalize">{c.first_name} {c.last_name}</td>
+                        <td className="px-4 py-3 text-gray-500 capitalize">{c.gender}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${statusStyle[c.status] || statusStyle.active}`}>
+                            {c.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
 
           <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">
-            Showing {filtered.length} of {mockRegistry.length} records
+            Showing {filtered.length} of {citizens.length} records
           </div>
         </div>
 
@@ -123,7 +137,7 @@ export default function NINRegistry() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-gray-800">Citizen Detail</h3>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${statusStyle[selected.status]}`}>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${statusStyle[selected.status] || statusStyle.active}`}>
                   {selected.status}
                 </span>
               </div>
@@ -134,21 +148,38 @@ export default function NINRegistry() {
               </div>
 
               {[
-                { label: 'First Name',    value: selected.firstName  },
-                { label: 'Last Name',     value: selected.lastName   },
-                { label: 'Date of Birth', value: selected.dob        },
-                { label: 'Gender',        value: selected.gender     },
-                { label: 'Province',      value: selected.province   },
+                { label: 'First Name',    value: selected.first_name  },
+                { label: 'Last Name',     value: selected.last_name   },
+                { label: 'Date of Birth', value: selected.date_of_birth?.slice(0, 10) },
+                { label: 'Gender',        value: selected.gender      },
               ].map((row) => (
                 <div key={row.label} className="flex justify-between text-sm border-b border-gray-100 pb-2">
                   <span className="text-gray-400">{row.label}</span>
-                  <span className="font-medium text-gray-800">{row.value}</span>
+                  <span className="font-medium text-gray-800 capitalize">{row.value}</span>
                 </div>
               ))}
 
+              {/* Verify Result */}
+              {verifyResult && (
+                <div className={`p-3 rounded-lg text-sm ${
+                  verifyResult.success
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}>
+                  {verifyResult.success
+                    ? '✓ Identity verified — Trust Triangle complete'
+                    : `✗ ${verifyResult.error}`}
+                </div>
+              )}
+
               <div className="flex gap-2 pt-2">
-                <button className="flex-1 flex items-center justify-center gap-1 py-2 bg-green-700 text-white rounded-lg text-xs font-medium hover:bg-green-800 transition-colors">
-                  <MdCheckCircle size={14} /> Verify
+                <button
+                  onClick={() => handleVerify(selected.nin)}
+                  disabled={verifying}
+                  className="flex-1 flex items-center justify-center gap-1 py-2 bg-green-700 text-white rounded-lg text-xs font-medium hover:bg-green-800 transition-colors disabled:opacity-50"
+                >
+                  <MdCheckCircle size={14} />
+                  {verifying ? 'Verifying...' : 'Verify'}
                 </button>
                 <button className="flex-1 flex items-center justify-center gap-1 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
                   <MdCancel size={14} /> Revoke

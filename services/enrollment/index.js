@@ -115,6 +115,22 @@ app.get('/citizen/:nin', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+// GET /citizens — list all citizens with NIns
+app.get('/citizens', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT c.id, c.first_name, c.last_name, c.date_of_birth, c.gender,
+              n.nin, n.status, n.issued_at
+       FROM citizens c
+       JOIN nin_records n ON n.citizen_id = c.id
+       ORDER BY n.issued_at DESC
+       LIMIT 100`
+    );
+    res.json({ success: true, citizens: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Enrolment service running on port ${PORT}`);
 });

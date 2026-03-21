@@ -5,10 +5,12 @@ import Enrolment from './pages/Enrolment'
 import NINRegistry from './pages/NINRegistry'
 import CivilRegistration from './pages/CivilRegistration'
 import GSBMonitor from './pages/GSBMonitor'
+import Login from './pages/Login'
 
 export default function App() {
   return (
     <Routes>
+      <Route path="/login" element={<Login />} />
       <Route path="/" element={<MainLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="enrolment" element={<Enrolment />} />
